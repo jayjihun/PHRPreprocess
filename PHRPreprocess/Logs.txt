@@ -1,0 +1,10 @@
+
+1. 한 cell 안에 여러개의 table이 있는 경우
+모두 concatenate 하였음.
+- 그런데 여러 table에 걸쳐 같은 row의 아이템이 있으면
+해당 record는 처리하지 않음.
+
+2. 한 table 안에 2개 이상의 column이 있는 경우
+해당 record는 처리하지 않음.
+
+3. 한 table 안에 
