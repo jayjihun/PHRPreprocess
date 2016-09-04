@@ -1,6 +1,7 @@
 #-*- coding: utf-8 -*-
 import _pickle
 import xlrd
+import csv
 
 def sumdict(a,b):
 	if a=='Skip' or b=='Skip':
@@ -63,6 +64,54 @@ class PreprocessorK:
 			postdata.append(newrow)
 
 		self.postdata = postdata
+		
+	def postprocess(self):
+		key_list = []
+
+		key_mod_map = {}
+
+		for row in self.postdata:
+			dic = row[-1]
+			if not dic:
+				continue
+			keys = list(dic.keys())
+			for key in keys:
+				#modify key
+				origkey = key
+				
+				key = key.split('(')[0]
+
+				key = key.lower()
+				key = key.strip()
+
+				cont = dic[origkey]
+				dic.pop(origkey)
+				dic[key]=cont
+
+	def stat(self):
+		empty_count=0
+		key_list={}
+
+		for row in self.postdata:
+			dic = row[-1]
+			if not dic:
+				empty_count+=1
+			else:
+				keys = list(dic.keys())
+				for key in keys:
+					if key not in key_list.keys():
+						key_list[key]=1
+					else:
+						key_list[key] += 1
+
+		key_lists = list(key_list.keys())
+		key_lists.sort()
+		for key in key_lists:
+			print(key)
+			#print(key_list[key], key)
+		print('Key counts:',len(key_list))
+
+		print('Empty count:',empty_count)
 
 	def _deal_str(self, idx, string):
 		#1. listize each lines.
@@ -82,11 +131,12 @@ class PreprocessorK:
 		gubuns = isdoubleline.count(True)
 		if gubuns==0:
 			first_process = self._deal_exceptions1(idx, lines)
-			if first_process != 'Failed':
-				return first_process
+			if first_process == 'Skip':
+				return None
+			elif first_process == 'Failed':
+				return None
 			else:
-				#unimplemented exceptions!
-				print('Undealt Gubun0 : ',idx)
+				return first_process
 
 		elif gubuns==1:
 			center_index, upline_index, downline_index = self._extract_lineindices(isdoubleline,issingleline,1)
@@ -124,6 +174,7 @@ class PreprocessorK:
 				return None
 			return dictized
 
+
 	def _extract_lineindices(self, isdoubleline, issingleline, th):
 		center_index=0
 		for i in range(th):
@@ -144,6 +195,7 @@ class PreprocessorK:
 		one = uselines[0].split('|')[0].strip()
 		two = uselines[0].split('|')[1].strip()
 
+		#do nothing.
 		if two != 'Result': 
 			pass
 
@@ -158,24 +210,67 @@ class PreprocessorK:
 		num_imp = 0
 		for index in range(2, len(uselines)):
 			line = uselines[index].strip()
-			if line.count('|') != 1:
-				num_imp+=1
-				#return 'Skip'
 
-		if num_imp == 1:
-			print(idx)
+			bar_count = line.count('|')
+			if bar_count==1:
+				continue #proper.
+			elif bar_count==0:
+				return 'Skip' # possibly properable.
+			else:
+				return 'Skip'
 
+		# finally, add to dict!
+		result = dict()
 
+		lastleft = None
 
+		for index in range(2, len(uselines)):
+			line = uselines[index].strip()
+			left = line.split('|')[0].strip()
+			right = line.split('|')[1].strip()
+
+			#if second line of legend,
+			if left.startswith('(') or left.startswith('#') or left.startswith('6') or len(left)==0:
+				if not lastleft:
+					continue
+				lastright = result[lastleft]
+				result.pop(lastleft)
+				newleft = lastleft+left
+				lastleft = newleft
+				result[newleft] = lastright+right
+
+			else:
+				lastleft = left
+				result[left] = right
+			
+		return result
 
 		
 		
 
 
 	def _deal_exceptions1(self, idx, lines):
-		emptys = [3857, 3858, 5063, 5064, 5790, 5791, 7353, 7443, 7444, 7445, 7446, 7447, 7448, 8179]
+		emptys = [3857, 3858, 4669, 5063, 5064, 5790, 5791, 7353, 7443, 7444, 7445, 7446, 7447, 7448, 8179]
+		skips = [2780, 7500, 7501, 7502, 7522, 7523]
+		exceptions = {
+			131:{'SMA' : 'negative in tumor nests'},
+			4418:{'CK' : 'No isolated tumor cells in sentinel node'},
+			4419:{'CK' : 'No isolated tumor cells in sentinel node'},
+			4420:{'CK' : 'No isolated tumor cells in sentinel node'},
+			7941:{'SMA' : 'Positive in salpingeal muscle'},
+			10943:{'ER' : 'negative', 'PR':'negative', 'c-erbB2':'3+'},
+			10944:{'ER' : 'negative', 'PR':'negative', 'c-erbB2':'3+'},
+			10945:{'ER' : 'negative', 'PR':'negative', 'c-erbB2':'3+'}
+			}
+
+
+
 		if idx in emptys:
 			return None
+		elif idx in skips:
+			return 'Skip'
+		elif idx in exceptions.keys():
+			return exceptions[idx]
 		else:
 			return 'Failed'
 
@@ -183,5 +278,34 @@ class PreprocessorK:
 		pass
 	
 	def save(self):
+		fieldnames = self.predata[0][:-1]
+		keys_list = []
+		for row in self.postdata:
+			if row[-1]:
+				keys_list += list(row[-1].keys())
+		keys_list = list(set(keys_list))
+		keys_list.sort()
+		fieldnames+=keys_list
+		dictized_rows = []
+		for row in self.postdata:
+			row_dict = dict()
+			for idx, item in enumerate(row[:-1]):
+				row_dict[fieldnames[idx]] = item
+			if not row[-1]:
+				continue
+			else:
+				for key in row[-1].keys():
+					row_dict[key] = row[-1][key]
+			dictized_rows.append(row_dict)
+
+
+		with open(self.postdatapath, 'w') as f:
+			writer= csv.DictWriter(f, fieldnames=fieldnames, lineterminator='\n')
+			writer.writeheader()
+			writer.writerows(dictized_rows)
+
+
+		return
+
 		with open(self.postdatapath, 'wb') as f:
 			_pickle.dump(self.postdata, f)

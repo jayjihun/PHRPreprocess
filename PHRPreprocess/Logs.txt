@@ -7,4 +7,6 @@
 2. 한 table 안에 2개 이상의 column이 있는 경우
 해당 record는 처리하지 않음.
 
-3. 한 table 안에 
+3. 한 table 안에 (~~~) | (~~~)
+형태로 나열되지 않은 data row가 있을 경우
+해당 record는 처리하지 않음.
